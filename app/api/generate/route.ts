@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+// Initialize Gemini with the requested environment variable
+// Use NEXT_PUBLIC_GEMINI_API_KEY as primary per user request, fallback to GOOGLE_API_KEY or just GEMINI_API_KEY if needed
+const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+const genAI = new GoogleGenerativeAI(apiKey);
 
 // Constants for NSCA Guidelines
 const NSCA_GUIDELINES = `
@@ -18,25 +20,28 @@ const NSCA_GUIDELINES = `
   - Volume (Sets x Reps) must be realistic for the time frame including rest periods.
 - **Intensity/Volume**:
   - Follow NSCA guidelines for the specific goal (Hypertrophy, Strength, Power, Endurance).
+  - **For Assistance Exercises**:
+    - PRIMARY notation must be "Low Intensity", "Mid Intensity", or "High Intensity".
+    - SECONDARY notation (optional) can include RPE or RIR (e.g., "Mid Intensity (RPE 8)").
 `;
 
 interface RequestBody {
   level: string;
   goal: string;
-  period: string; // e.g., "4 weeks" (implied by prompt but good to have)
+  period: string;
   days: string;
   duration: string;
   environment: string;
   healthStatus: string;
-  // 1RM inputs (optional for generation logic but useful context)
   benchPress1RM?: string;
   squat1RM?: string;
   deadlift1RM?: string;
 }
 
 export async function POST(req: NextRequest) {
-  if (!process.env.GOOGLE_API_KEY) {
-    return NextResponse.json({ error: 'API Key not configured' }, { status: 500 });
+  if (!apiKey) {
+    console.error("API Key missing. Checked: NEXT_PUBLIC_GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY");
+    return NextResponse.json({ error: 'API Key not configured on server' }, { status: 500 });
   }
 
   try {
@@ -69,7 +74,7 @@ export async function POST(req: NextRequest) {
                 "sets": "3",
                 "reps": "10",
                 "rest": "2 min",
-                "intensity": "75% 1RM" or "RPE 8" or "Mid Intensity",
+                "intensity": "75% 1RM" or "High Intensity" or "Mid Intensity (RPE 8)",
                 "notes": "Technique cue or specific instruction"
               }
             ]
@@ -122,6 +127,7 @@ export async function POST(req: NextRequest) {
         3. Is assistance work last?
         4. Is the volume realistic for ${duration}?
         5. Is there a clear deload strategy mentioned?
+        6. Are assistance exercises using "Low/Mid/High Intensity" notation?
 
         If ALL checks pass, output "PASS".
         If ANY check fails, output "FAIL: <Reason>".
