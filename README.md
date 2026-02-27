@@ -1,4 +1,4 @@
-# Training Menu AI
+# Scientific Workout Generator
 
 This project is a Next.js application that generates personalized strength training programs based on NSCA guidelines using the Gemini API. It also includes user authentication and data persistence via Supabase.
 
