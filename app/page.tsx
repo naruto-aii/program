@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, Check, Download, Loader2 } from "lucide-react";
+import { ChevronLeft, Check, Download, Loader2, LogIn } from "lucide-react";
+import { supabase } from "./utils/supabase";
+import { User } from "@supabase/supabase-js";
 
 // --- Types ---
 
@@ -55,6 +57,7 @@ export default function TrainingApp() {
   const [showResult, setShowResult] = useState(false);
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // Define totalSteps constant
   const totalSteps = 6;
@@ -72,6 +75,47 @@ export default function TrainingApp() {
     squat1RM: "",
     deadlift1RM: "",
   });
+
+  // Auth & Data Init
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+
+      if (user) {
+         // Fetch 1RM data if logged in
+         const { data: profile } = await supabase
+          .from('profiles')
+          .select('squat_1rm, bench_press_1rm, deadlift_1rm')
+          .eq('id', user.id)
+          .single();
+
+         if (profile) {
+             setFormData(prev => ({
+                 ...prev,
+                 squat1RM: profile.squat_1rm?.toString() || "",
+                 benchPress1RM: profile.bench_press_1rm?.toString() || "",
+                 deadlift1RM: profile.deadlift_1rm?.toString() || ""
+             }));
+         }
+      }
+    };
+    checkUser();
+
+    // Restore generated menu if coming back from login
+    const savedMenu = localStorage.getItem('tempGeneratedMenu');
+    if (savedMenu) {
+        setGeneratedMenu(JSON.parse(savedMenu));
+        setShowResult(true);
+        localStorage.removeItem('tempGeneratedMenu'); // Clear it
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Generation Simulation / Countdown
   useEffect(() => {
@@ -135,6 +179,56 @@ export default function TrainingApp() {
     return intensity;
   };
 
+  const handleLogin = async () => {
+    // Save current menu to local storage before redirecting
+    if (generatedMenu) {
+        localStorage.setItem('tempGeneratedMenu', JSON.stringify(generatedMenu));
+    }
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+  };
+
+  const handleSave = async () => {
+    if (!user || !generatedMenu) return;
+
+    try {
+        // 1. Save Menu
+        const { error: menuError } = await supabase
+            .from('generated_menus')
+            .insert({
+                user_id: user.id,
+                menu_data: generatedMenu
+            });
+
+        if (menuError) throw menuError;
+
+        // 2. Update 1RM in Profile
+        const updates = {
+            id: user.id,
+            squat_1rm: formData.squat1RM ? parseFloat(formData.squat1RM) : null,
+            bench_press_1rm: formData.benchPress1RM ? parseFloat(formData.benchPress1RM) : null,
+            deadlift_1rm: formData.deadlift1RM ? parseFloat(formData.deadlift1RM) : null,
+            updated_at: new Date().toISOString(),
+        };
+
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert(updates);
+
+        if (profileError) throw profileError;
+
+        alert("メニューと1RMデータを保存しました！");
+
+    } catch (error) {
+        console.error('Error saving:', error);
+        alert("保存に失敗しました。");
+    }
+  };
+
   // --- UI Components ---
   const SelectionCard = ({ label, description, active, onClick }: SelectionCardProps) => (
     <div
@@ -160,13 +254,31 @@ export default function TrainingApp() {
           <p className="text-xl text-slate-500 max-w-lg leading-relaxed">
             NSCAガイドラインに準拠した科学的なプログラムを、AIがあなたの環境に合わせて生成します。
           </p>
-          <button
-            onClick={handleStart}
-            type="button"
-            className="bg-slate-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-slate-800 transition-all shadow-xl hover:scale-105"
-          >
-            ゲストとして開始する
-          </button>
+          <div className="space-y-4 w-full max-w-xs">
+            {user ? (
+                 <div className="text-center text-slate-600 mb-4">
+                     ようこそ、{user.email} さん
+                 </div>
+            ) : null}
+
+            <button
+                onClick={handleStart}
+                type="button"
+                className="w-full bg-slate-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-slate-800 transition-all shadow-xl hover:scale-105"
+            >
+                {user ? "メニューを作成する" : "ゲストとして開始する"}
+            </button>
+
+            {!user && (
+                <button
+                    onClick={handleLogin}
+                    type="button"
+                    className="w-full flex items-center justify-center gap-2 border border-slate-300 text-slate-700 px-10 py-4 rounded-full font-bold text-lg hover:bg-slate-50 transition-all"
+                >
+                    <LogIn className="w-5 h-5" /> ログインして開始
+                </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -245,12 +357,21 @@ export default function TrainingApp() {
 
           <div className="text-center py-12 bg-white border border-slate-200 rounded-2xl shadow-sm">
             <p className="text-slate-600 mb-6 font-medium">このメニューを保存して、成長を記録しませんか？</p>
-            <button
-              onClick={() => window.print()}
-              type="button"
-              className="inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-full font-bold hover:bg-slate-800 transition shadow-lg">
-              <Download className="w-5 h-5" /> PDFとして保存
-            </button>
+            {user ? (
+                <button
+                  onClick={handleSave}
+                  type="button"
+                  className="inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-full font-bold hover:bg-slate-800 transition shadow-lg">
+                  <Check className="w-5 h-5" /> 履歴に保存する
+                </button>
+            ) : (
+                <button
+                  onClick={handleLogin}
+                  type="button"
+                  className="inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-full font-bold hover:bg-slate-800 transition shadow-lg">
+                  <LogIn className="w-5 h-5" /> Googleでログインして保存
+                </button>
+            )}
           </div>
         </div>
       )}

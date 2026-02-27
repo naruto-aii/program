@@ -91,7 +91,6 @@ export async function POST(req: NextRequest) {
 
     while (attempts < maxAttempts) {
       attempts++;
-      console.log(`Attempt ${attempts} to generate plan...`);
 
       // Generate
       const result = await model.generateContent(currentPrompt);
@@ -137,7 +136,6 @@ export async function POST(req: NextRequest) {
       const critiqueText = critiqueResult.response.text();
 
       if (critiqueText.includes("PASS")) {
-        console.log(`Attempt ${attempts} passed critique.`);
         generatedPlan = jsonResponse;
         break; // Success!
       } else {
