@@ -1,21 +1,66 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronRight, ChevronLeft, Check, Download, Loader2 } from "lucide-react";
+import { ChevronLeft, Check, Download, Loader2 } from "lucide-react";
+
+// --- Types ---
+
+interface Exercise {
+  name: string;
+  sets: string | number;
+  reps: string | number;
+  rest: string;
+  intensity: string;
+  notes: string;
+}
+
+interface DaySchedule {
+  day_number: number;
+  day_name: string;
+  exercises: Exercise[];
+}
+
+interface GeneratedMenu {
+  rationale: string;
+  schedule: DaySchedule[];
+  week_4_deload_modifications: string;
+}
+
+interface FormData {
+  level: string;
+  goal: string;
+  period: string;
+  days: string;
+  duration: string;
+  environment: string;
+  healthStatus: string;
+  benchPress1RM: string;
+  squat1RM: string;
+  deadlift1RM: string;
+}
+
+interface SelectionCardProps {
+  label: string;
+  description?: string;
+  active?: boolean;
+  onClick: () => void;
+}
+
+// --- Component ---
 
 export default function TrainingApp() {
   const [step, setStep] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [countdown, setCountdown] = useState(10);
   const [showResult, setShowResult] = useState(false);
-  const [generatedMenu, setGeneratedMenu] = useState<any>(null);
+  const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Define totalSteps constant
   const totalSteps = 6;
 
   // Form State
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     level: "",
     goal: "",
     period: "4週間",
@@ -91,7 +136,7 @@ export default function TrainingApp() {
   };
 
   // --- UI Components ---
-  const SelectionCard = ({ label, description, active, onClick }: any) => (
+  const SelectionCard = ({ label, description, active, onClick }: SelectionCardProps) => (
     <div
       onClick={onClick}
       role="button"
@@ -167,7 +212,7 @@ export default function TrainingApp() {
           </div>
 
           <div className="space-y-8">
-            {generatedMenu.schedule.map((day: any, idx: number) => (
+            {generatedMenu.schedule.map((day, idx) => (
               <div key={idx} className="overflow-hidden border border-slate-200 rounded-xl">
                 <div className="bg-slate-100 px-6 py-3 font-bold text-slate-700 border-b border-slate-200">
                   {day.day_name}
@@ -183,7 +228,7 @@ export default function TrainingApp() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {day.exercises.map((ex: any, exIdx: number) => (
+                    {day.exercises.map((ex, exIdx) => (
                       <tr key={exIdx}>
                         <td className="px-6 py-4 font-semibold text-slate-900">{ex.name}</td>
                         <td className="px-6 py-4">{formatWeight(ex.intensity, ex.name)}</td>
